@@ -2,6 +2,9 @@
 
 Everglow is a neon-themed endless dodging game built with Jetpack Compose. You steer a light orb across three lanes, weaving around descending obstacles while chaining up a score multiplier and chasing personal bests. The interaction model is tuned for both touch and keyboard input, making it easy to pick up and play on phone or emulator.
 
+## Demo
+![](everglow.mp4)
+
 ## Highlights
 - Built entirely with Compose for Android, including animations, pointer gestures, and custom drawing on `Canvas`.
 - Stateful game loop powered by a pure Kotlin `GameState` model with deterministic collision and spawn logic.
