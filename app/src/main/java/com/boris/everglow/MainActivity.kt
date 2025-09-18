@@ -44,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.boris.everglow.audio.GameAudio
 import com.boris.everglow.game.GameState
 import com.boris.everglow.ui.theme.EverglowTheme
 import kotlin.math.max
@@ -108,6 +110,10 @@ private fun GameRoot() {
     var isHighlightingHighScore by remember { mutableStateOf(false) }
     var previousHighScore by remember { mutableStateOf(gameState.highScore) }
     val random = remember { Random(System.currentTimeMillis()) }
+    val audio = remember { GameAudio(context) }
+    DisposableEffect(audio) {
+        onDispose { audio.release() }
+    }
 
     LaunchedEffect(gameState.session, showMenu) {
         if (showMenu) return@LaunchedEffect
@@ -118,7 +124,19 @@ private fun GameRoot() {
             val frameTime = withFrameMillis { it }
             val deltaSeconds = (frameTime - lastFrame) / 1000f
             lastFrame = frameTime
-            gameState = gameState.advance(deltaSeconds, random)
+            val nextState = gameState.advance(deltaSeconds, random)
+            if (gameState.isRunning && !nextState.isRunning) {
+                audio.playCollision()
+            }
+            gameState = nextState
+        }
+    }
+
+    LaunchedEffect(showMenu, gameState.isRunning) {
+        when {
+            showMenu -> audio.stopMusic()
+            gameState.isRunning -> audio.ensureMusicPlaying()
+            else -> audio.pauseMusic()
         }
     }
 
@@ -126,6 +144,7 @@ private fun GameRoot() {
         if (gameState.highScore > previousHighScore) {
             latestHighScoreSession = gameState.session
             sharedPrefs.edit().putInt(HIGH_SCORE_PREF_KEY, gameState.highScore).apply()
+            audio.playHighScore()
         }
         previousHighScore = gameState.highScore
     }
@@ -144,6 +163,7 @@ private fun GameRoot() {
         MainMenu(
             highScore = gameState.highScore,
             onStart = {
+                audio.playUiConfirm()
                 gameState = GameState(highScore = gameState.highScore)
                 showMenu = false
             }
@@ -179,7 +199,10 @@ private fun GameRoot() {
                         highlightHighScore = isHighlightingHighScore,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { showMenu = true }) {
+                    TextButton(onClick = {
+                        audio.playUiCancel()
+                        showMenu = true
+                    }) {
                         Text(text = stringResource(id = R.string.open_menu))
                     }
                 }
@@ -203,8 +226,20 @@ private fun GameRoot() {
                         textAlign = TextAlign.Center
                     )
                     ControlRow(
-                        onMoveLeft = { gameState = gameState.move(-1) },
-                        onMoveRight = { gameState = gameState.move(1) }
+                        onMoveLeft = {
+                            val updated = gameState.move(-1)
+                            if (updated.playerLane != gameState.playerLane) {
+                                audio.playLaneShift()
+                            }
+                            gameState = updated
+                        },
+                        onMoveRight = {
+                            val updated = gameState.move(1)
+                            if (updated.playerLane != gameState.playerLane) {
+                                audio.playLaneShift()
+                            }
+                            gameState = updated
+                        }
                     )
                 }
             }
@@ -214,8 +249,14 @@ private fun GameRoot() {
                     score = gameState.score,
                     highScore = gameState.highScore,
                     isNewHighScore = latestHighScoreSession == gameState.session,
-                    onRestart = { gameState = gameState.restart() },
-                    onBackToMenu = { showMenu = true }
+                    onRestart = {
+                        audio.playUiConfirm()
+                        gameState = gameState.restart()
+                    },
+                    onBackToMenu = {
+                        audio.playUiCancel()
+                        showMenu = true
+                    }
                 )
             }
         }
